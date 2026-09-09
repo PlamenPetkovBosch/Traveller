@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waypoint — Travel Agent</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+  :root{
+    --ink: #16232B;
+    --ink-soft: #223640;
+    --parchment: #F1ECDF;
+    --brass: #B4884A;
+    --brass-bright: #D3A25F;
+    --teal: #4C7A73;
+    --line: rgba(241,236,223,0.14);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--parchment);
+    font-family: 'Inter', sans-serif;
+  }
+
+  #root { min-height: 100vh; }
+
+  .app {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    min-height: 100vh;
+  }
+
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+    .map-pane { height: 60vh; }
+  }
+
+  .panel {
+    padding: 40px 32px;
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .brand .mark {
+    font-family: 'Fraunces', serif;
+    font-size: 30px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--parchment);
+  }
+
+  .brand .mark span { color: var(--brass-bright); }
+
+  .brand .tagline {
+    font-size: 13px;
+    color: rgba(241,236,223,0.55);
+    line-height: 1.5;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .field label {
+    font-size: 12px;
+    color: rgba(241,236,223,0.6);
+  }
+
+  select {
+    appearance: none;
+    background: var(--ink-soft);
+    border: 1px solid var(--line);
+    color: var(--parchment);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    padding: 12px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+
+  select:focus {
+    outline: 2px solid var(--brass);
+    outline-offset: 1px;
+  }
+
+  .swap-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .swap-btn {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--parchment);
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s ease;
+  }
+  .swap-btn:hover { border-color: var(--brass); }
+  .swap-btn:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+  .results {
+    margin-top: 4px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .results.empty {
+    color: rgba(241,236,223,0.4);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 4px 0;
+  }
+
+  .stat .label { font-size: 13px; color: rgba(241,236,223,0.55); }
+  .stat .value {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--brass-bright);
+  }
+
+  .sights {
+    margin-top: 4px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sights h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+    color: var(--parchment);
+  }
+
+  .sights-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sight-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 8px 4px;
+    border-bottom: 1px solid rgba(241,236,223,0.06);
+    font-size: 13.5px;
+  }
+
+  .sight-item .num {
+    color: var(--teal);
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    min-width: 18px;
+  }
+
+  .sight-item .name { color: var(--parchment); flex: 1; }
+  .sight-item .kind { color: rgba(241,236,223,0.45); font-size: 12px; }
+
+  .sights-empty {
+    font-size: 13px;
+    color: rgba(241,236,223,0.4);
+  }
+
+  .sight-item.clickable {
+    cursor: pointer;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    transition: background 0.12s ease;
+  }
+  .sight-item.clickable:hover,
+  .sight-item.clickable:focus-visible {
+    background: rgba(241,236,223,0.05);
+    outline: none;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 16, 20, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 1000;
+  }
+
+  .modal-card {
+    background: var(--ink-soft);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    max-width: 520px;
+    width: 100%;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  .modal-image {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+    display: block;
+    background: var(--ink);
+  }
+
+  .modal-body {
+    padding: 24px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .modal-title {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--parchment);
+    margin: 0;
+  }
+
+  .modal-close {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--parchment);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 15px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-close:hover { border-color: var(--brass); }
+  .modal-close:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+  .modal-description {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: rgba(241,236,223,0.88);
+  }
+
+  .modal-loading {
+    padding: 60px 28px;
+    text-align: center;
+    color: rgba(241,236,223,0.5);
+    font-size: 14px;
+  }
+
+  .modal-error {
+    padding: 28px;
+    color: #E08E7D;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .modal-sources {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  .modal-sources a {
+    font-size: 12px;
+    color: var(--teal);
+    text-decoration: none;
+  }
+  .modal-sources a:hover { text-decoration: underline; }
+
+  .route-line {
+    font-size: 14px;
+    color: rgba(241,236,223,0.85);
+    line-height: 1.5;
+  }
+
+  .error {
+    font-size: 13px;
+    color: #E08E7D;
+  }
+
+  .map-pane { position: relative; }
+  #map { width: 100%; height: 100%; background: var(--ink-soft); }
+
+  .leaflet-popup-content-wrapper {
+    background: var(--ink-soft);
+    color: var(--parchment);
+    border-radius: 3px;
+  }
+  .leaflet-popup-tip { background: var(--ink-soft); }
+  .leaflet-popup-content { font-family: 'Inter', sans-serif; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script type="text/babel" data-type="module">
+const { useState, useEffect, useRef } = React;
+
+// Served from the same FastAPI server, so relative paths work regardless of host/port.
+const API_BASE = "";
+
+function formatDuration(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  if (hours === 0) return `${minutes} min`;
+  return `${hours} hr ${minutes} min`;
+}
+
+function App() {
+  const [destinations, setDestinations] = useState([]);
+  const [originId, setOriginId] = useState("");
+  const [destId, setDestId] = useState("");
+  const [trip, setTrip] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [sights, setSights] = useState([]);
+  const [sightsError, setSightsError] = useState(null);
+  const [sightsLoading, setSightsLoading] = useState(false);
+
+  const [activeSight, setActiveSight] = useState(null); // {xid, name} of clicked sight
+  const [sightDetail, setSightDetail] = useState(null);
+  const [sightDetailLoading, setSightDetailLoading] = useState(false);
+  const [sightDetailError, setSightDetailError] = useState(null);
+
+  const mapRef = useRef(null);
+  const leafletMap = useRef(null);
+  const layerGroup = useRef(null);
+  const sightsLayer = useRef(null);
+
+  // Load destination list from the backend on mount.
+  useEffect(() => {
+    fetch(`${API_BASE}/api/destinations`)
+      .then((r) => {
+        if (!r.ok) throw new Error("Could not reach the travel agent backend.");
+        return r.json();
+      })
+      .then((data) => {
+        setDestinations(data);
+        if (data.length > 1) {
+          setOriginId(data[0].id);
+          setDestId(data[1].id);
+        }
+      })
+      .catch((e) => setError(e.message));
+  }, []);
+
+  // Initialize the Leaflet map once.
+  useEffect(() => {
+    leafletMap.current = L.map(mapRef.current, {
+      worldCopyJump: true,
+    }).setView([42.7339, 25.4858], 7); // Bulgaria
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(leafletMap.current);
+
+    layerGroup.current = L.layerGroup().addTo(leafletMap.current);
+    sightsLayer.current = L.layerGroup().addTo(leafletMap.current);
+
+    return () => leafletMap.current.remove();
+  }, []);
+
+  const runTrip = () => {
+    if (!originId || !destId) return;
+    setError(null);
+    setLoading(true);
+    fetch(`${API_BASE}/api/trip`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ origin_id: originId, destination_id: destId }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error("The agent couldn't calculate that route.");
+        return r.json();
+      })
+      .then((data) => {
+        setTrip(data);
+        drawRoute(data);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
+  const drawRoute = (data) => {
+    layerGroup.current.clearLayers();
+
+    const originLatLng = [data.origin.lat, data.origin.lon];
+    const destLatLng = [data.destination.lat, data.destination.lon];
+
+    L.circleMarker(originLatLng, { radius: 7, color: "#D3A25F", fillColor: "#D3A25F", fillOpacity: 1 })
+      .bindPopup(`<strong>${data.origin.name}</strong>`)
+      .addTo(layerGroup.current);
+
+    L.circleMarker(destLatLng, { radius: 7, color: "#4C7A73", fillColor: "#4C7A73", fillOpacity: 1 })
+      .bindPopup(`<strong>${data.destination.name}</strong>`)
+      .addTo(layerGroup.current);
+
+    const routeLine = (data.route && data.route.length > 0) ? data.route : [originLatLng, destLatLng];
+
+    L.polyline(routeLine, { color: "#D3A25F", weight: 4, opacity: 0.85 })
+      .addTo(layerGroup.current);
+
+    leafletMap.current.fitBounds(routeLine, { padding: [60, 60] });
+  };
+
+  // Auto-run once destinations are loaded and both selections exist.
+  useEffect(() => {
+    if (originId && destId) runTrip();
+  }, [originId, destId]);
+
+  // Fetch and plot top sights whenever the "To" city changes.
+  useEffect(() => {
+    if (!destId) return;
+    setSightsError(null);
+    setSightsLoading(true);
+    fetch(`${API_BASE}/api/sights/${destId}`)
+      .then((r) => {
+        if (!r.ok) return r.json().then((body) => { throw new Error(body.detail || "Couldn't load sights."); });
+        return r.json();
+      })
+      .then((data) => {
+        setSights(data);
+        drawSights(data);
+      })
+      .catch((e) => {
+        setSights([]);
+        sightsLayer.current && sightsLayer.current.clearLayers();
+        setSightsError(e.message);
+      })
+      .finally(() => setSightsLoading(false));
+  }, [destId]);
+
+  const drawSights = (list) => {
+    if (!sightsLayer.current) return;
+    sightsLayer.current.clearLayers();
+    list.forEach((s, i) => {
+      L.circleMarker([s.lat, s.lon], {
+        radius: 5,
+        color: "#8FB8AF",
+        fillColor: "#8FB8AF",
+        fillOpacity: 0.9,
+        weight: 1,
+      })
+        .bindPopup(`<strong>${i + 1}. ${s.name}</strong><br/>${s.kind}`)
+        .addTo(sightsLayer.current);
+    });
+  };
+
+  const openSight = (sight) => {
+    setActiveSight(sight);
+    setSightDetail(null);
+    setSightDetailError(null);
+    setSightDetailLoading(true);
+
+    fetch(`${API_BASE}/api/sight/${sight.xid}?name=${encodeURIComponent(sight.name)}`)
+      .then((r) => {
+        if (!r.ok) return r.json().then((body) => { throw new Error(body.detail || "Couldn't load details for this sight."); });
+        return r.json();
+      })
+      .then((data) => setSightDetail(data))
+      .catch((e) => setSightDetailError(e.message))
+      .finally(() => setSightDetailLoading(false));
+  };
+
+  const closeSight = () => {
+    setActiveSight(null);
+    setSightDetail(null);
+    setSightDetailError(null);
+  };
+
+  const swap = () => {
+    setOriginId(destId);
+    setDestId(originId);
+  };
+
+  return (
+    <div className="app">
+      <div className="panel">
+        <div className="brand">
+          <div className="mark">Way<span>point</span></div>
+          <div className="tagline">Bulgaria, by car. Pick two cities and the agent finds the driving route.</div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="origin">From</label>
+          <select id="origin" value={originId} onChange={(e) => setOriginId(e.target.value)}>
+            {destinations.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="swap-row">
+          <button className="swap-btn" onClick={swap} aria-label="Swap origin and destination">⇅</button>
+          <div className="field" style={{flex: 1}}>
+            <label htmlFor="destination">To</label>
+            <select id="destination" value={destId} onChange={(e) => setDestId(e.target.value)}>
+              {destinations.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {error && <div className="error">{error}</div>}
+
+        {trip && !error ? (
+          <div className="results">
+            <div className="route-line">{trip.origin.name} → {trip.destination.name}</div>
+            <div className="stat">
+              <span className="label">Distance</span>
+              <span className="value">{trip.distance_km.toLocaleString()} km</span>
+            </div>
+            <div className="stat">
+              <span className="label">Driving time</span>
+              <span className="value">{formatDuration(trip.duration_minutes)}</span>
+            </div>
+          </div>
+        ) : (
+          !error && <div className="results empty">{loading ? "Calculating…" : "Select two destinations to see the route."}</div>
+        )}
+
+        <div className="sights">
+          <h2>Top sights</h2>
+          {sightsLoading && <div className="sights-empty">Loading…</div>}
+          {sightsError && !sightsLoading && <div className="error">{sightsError}</div>}
+          {!sightsLoading && !sightsError && sights.length === 0 && (
+            <div className="sights-empty">No sights found for this city.</div>
+          )}
+          {!sightsLoading && !sightsError && sights.length > 0 && (
+            <ol className="sights-list">
+              {sights.map((s, i) => (
+                <li key={`${s.xid}-${i}`}>
+                  <button className="sight-item clickable" onClick={() => openSight(s)}>
+                    <span className="num">{i + 1}</span>
+                    <span className="name">{s.name}</span>
+                    <span className="kind">{s.kind}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+
+      <div className="map-pane">
+        <div id="map" ref={mapRef}></div>
+      </div>
+
+      {activeSight && (
+        <div className="modal-overlay" onClick={closeSight}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            {sightDetailLoading && (
+              <div className="modal-loading">Asking the agent about {activeSight.name}…</div>
+            )}
+
+            {sightDetailError && !sightDetailLoading && (
+              <div className="modal-body">
+                <div className="modal-header">
+                  <h3 className="modal-title">{activeSight.name}</h3>
+                  <button className="modal-close" onClick={closeSight} aria-label="Close">✕</button>
+                </div>
+                <div className="modal-error">{sightDetailError}</div>
+              </div>
+            )}
+
+            {sightDetail && !sightDetailLoading && !sightDetailError && (
+              <React.Fragment>
+                {sightDetail.image_url && (
+                  <img className="modal-image" src={sightDetail.image_url} alt={sightDetail.name} />
+                )}
+                <div className="modal-body">
+                  <div className="modal-header">
+                    <h3 className="modal-title">{sightDetail.name}</h3>
+                    <button className="modal-close" onClick={closeSight} aria-label="Close">✕</button>
+                  </div>
+                  <div className="modal-description">{sightDetail.description}</div>
+                  {sightDetail.sources && sightDetail.sources.length > 0 && (
+                    <div className="modal-sources">
+                      {sightDetail.sources.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer">{url}</a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </React.Fragment>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
